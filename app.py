@@ -14,15 +14,15 @@ load_dotenv()
 
 def setup_page():
     """Set up the Streamlit page with a header and custom styles."""
-    st.header("Chat with Different Types of Media and Files", anchor=False, divider="blue")
+    st.header("Chat with Documents and Media", anchor=False, divider="blue")
 
-    # Hide the Streamlit menu
-    hide_menu_style = """
-        <style>
-        #MainMenu {visibility: hidden;}
-        </style>
-        """
-    st.markdown(hide_menu_style, unsafe_allow_html=True)
+    # # Hide the Streamlit menu
+    # hide_menu_style = """
+    #     <style>
+    #     #MainMenu {visibility: hidden;}
+    #     </style>
+    #     """
+    # st.markdown(hide_menu_style, unsafe_allow_html=True)
 
 
 def get_media_type():
