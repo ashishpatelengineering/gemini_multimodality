@@ -14,7 +14,7 @@ load_dotenv()
 
 def setup_page():
     """Set up the Streamlit page with a header and custom styles."""
-    st.header("Chat with Documents and Media", anchor=False, divider="blue")
+    st.header("AI-Powered File & Media Interaction", anchor=False, divider="blue")
 
     # # Hide the Streamlit menu
     # hide_menu_style = """
@@ -23,7 +23,6 @@ def setup_page():
     #     </style>
     #     """
     # st.markdown(hide_menu_style, unsafe_allow_html=True)
-
 
 def get_media_type():
     """Display a sidebar radio button to select the type of media."""
@@ -115,7 +114,7 @@ def main():
                 model_name=model,
                 generation_config=generation_config,
             )
-            st.write(model.count_tokens(text))
+            # st.write(model.count_tokens(text))
             question = st.text_input("Enter your question and hit return.")
             if question:
                 response = model.generate_content([question, text])
