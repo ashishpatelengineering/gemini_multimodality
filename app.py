@@ -1,82 +1,103 @@
+import os
+import time
+import tempfile
 import streamlit as st
 import google.generativeai as genai
-from pypdf import PdfReader 
-import os, fitz, PIL.Image, time
+from pypdf import PdfReader
+import fitz
+import PIL.Image
 from dotenv import load_dotenv
+
+# Load environment variables
 load_dotenv()
 
-path2 = '/Users/....'
 
-def page_setup():
-    st.header("Chat with different types of media/files!", anchor=False, divider="blue")
+def setup_page():
+    """Set up the Streamlit page with a header and custom styles."""
+    st.header("Chat with Different Types of Media and Files", anchor=False, divider="blue")
 
+    # Hide the Streamlit menu
     hide_menu_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            </style>
-            """
+        <style>
+        #MainMenu {visibility: hidden;}
+        </style>
+        """
     st.markdown(hide_menu_style, unsafe_allow_html=True)
 
 
-def get_typeofpdf():
-    st.sidebar.header("Select type of Media", divider='orange')
-    typepdf = st.sidebar.radio("Choose one:",
-                               ("PDF files",
-                                "Images",
-                                "Video, mp4 file",
-                                "Audio files"))
-    return typepdf
+def get_media_type():
+    """Display a sidebar radio button to select the type of media."""
+    st.sidebar.header("Select Type of Media", divider='orange')
+    media_type = st.sidebar.radio(
+        "Choose one:",
+        ("PDF files", "Images", "Video (mp4)", "Audio (mp3)")
+    )
+    return media_type
 
 
-def get_llminfo():
-    st.sidebar.header("Options", divider='rainbow')
-    tip1="Select a model you want to use."
-    model = st.sidebar.radio("Choose LLM:",
-                                  ("gemini-1.5-flash",
-                                   "gemini-1.5-pro",
-                                   ), help=tip1)
-    tip2="Lower temperatures are good for prompts that require a less open-ended or creative response, while higher temperatures can lead to more diverse or creative results. A temperature of 0 means that the highest probability tokens are always selected."
-    temp = st.sidebar.slider("Temperature:", min_value=0.0,
-                                    max_value=2.0, value=1.0, step=0.25, help=tip2)
-    tip3="Used for nucleus sampling. Specify a lower value for less random responses and a higher value for more random responses."
-    topp = st.sidebar.slider("Top P:", min_value=0.0,
-                             max_value=1.0, value=0.94, step=0.01, help=tip3)
-    tip4="Number of response tokens, 8194 is limit."
-    maxtokens = st.sidebar.slider("Maximum Tokens:", min_value=100,
-                                  max_value=5000, value=2000, step=100, help=tip4)
-    return model, temp, topp, maxtokens
+def get_llm_settings():
+    """Display sidebar options for configuring the LLM."""
+    st.sidebar.header("LLM Configuration", divider='rainbow')
+
+    model_tip = "Select the model you want to use."
+    model = st.sidebar.radio(
+        "Choose LLM:",
+        ("gemini-1.5-flash", "gemini-1.5-pro"),
+        help=model_tip
+    )
+
+    temp_tip = (
+        "Lower temperatures are good for prompts requiring less creativity, "
+        "while higher temperatures can lead to more diverse or creative results. "
+        "A temperature of 0 means the highest probability tokens are always selected."
+    )
+    temperature = st.sidebar.slider(
+        "Temperature:", min_value=0.0, max_value=2.0, value=1.0, step=0.25, help=temp_tip
+    )
+
+    top_p_tip = (
+        "Used for nucleus sampling. Lower values result in less random responses, "
+        "while higher values result in more random responses."
+    )
+    top_p = st.sidebar.slider(
+        "Top P:", min_value=0.0, max_value=1.0, value=0.94, step=0.01, help=top_p_tip
+    )
+
+    max_tokens_tip = "Number of response tokens. The limit is 8194."
+    max_tokens = st.sidebar.slider(
+        "Maximum Tokens:", min_value=100, max_value=5000, value=2000, step=100, help=max_tokens_tip
+    )
+
+    return model, temperature, top_p, max_tokens
 
 
-def delete_files_in_directory(directory_path):
-   try:
-     files = os.listdir(directory_path)
-     for file in files:
-       file_path = os.path.join(directory_path, file)
-       if os.path.isfile(file_path):
-         os.remove(file_path)
-   except OSError:
-     print("Error occurred while deleting files.")
+def extract_images_from_pdf(pdf_file):
+    """Extract images from a PDF file and save them as temporary files."""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(pdf_file.read())
+        tmp_file_path = tmp_file.name
 
-
-def setup_documents(pdf_file_path):
-    to_delete_path = path2
-    delete_files_in_directory(to_delete_path)
-    doc = fitz.open(pdf_file_path)
-    os.chdir(to_delete_path)
-    for page in doc: 
-        pix = page.get_pixmap(matrix=fitz.Identity, dpi=None, 
-                              colorspace=fitz.csRGB, clip=None, alpha=False, annots=True) 
-        pix.save("pdfimage-%i.jpg" % page.number) 
+    doc = fitz.open(tmp_file_path)
+    images = []
+    for page in doc:
+        pix = page.get_pixmap(
+            matrix=fitz.Identity, dpi=None, colorspace=fitz.csRGB, clip=None, alpha=False, annots=True
+        )
+        img_path = f"pdfimage-{page.number}.jpg"
+        pix.save(img_path)
+        images.append(img_path)
+    return images
 
 
 def main():
-    page_setup()
-    typepdf = get_typeofpdf()
-    model, temperature, top_p,  max_tokens = get_llminfo()
-    
-    if typepdf == "PDF files":
-        uploaded_files = st.file_uploader("Choose 1 or more PDF", type='pdf', accept_multiple_files=True)
-           
+    """Main function to run the Streamlit app."""
+    setup_page()
+    media_type = get_media_type()
+    model, temperature, top_p, max_tokens = get_llm_settings()
+
+    if media_type == "PDF files":
+        uploaded_files = st.file_uploader("Upload PDF file", type="pdf", accept_multiple_files=True)
+
         if uploaded_files:
             text = ""
             for pdf in uploaded_files:
@@ -85,112 +106,92 @@ def main():
                     text += page.extract_text()
 
             generation_config = {
-              "temperature": temperature,
-              "top_p": top_p,
-              "max_output_tokens": max_tokens,
-              "response_mime_type": "text/plain",
-              }
+                "temperature": temperature,
+                "top_p": top_p,
+                "max_output_tokens": max_tokens,
+                "response_mime_type": "text/plain",
+            }
             model = genai.GenerativeModel(
-              model_name=model,
-              generation_config=generation_config,)
-            st.write(model.count_tokens(text)) 
+                model_name=model,
+                generation_config=generation_config,
+            )
+            st.write(model.count_tokens(text))
             question = st.text_input("Enter your question and hit return.")
             if question:
                 response = model.generate_content([question, text])
                 st.write(response.text)
-                
-    elif typepdf == "Images":
-        image_file_name = st.file_uploader("Upload your image file.",)
-        if image_file_name:
-            path3 = '/Users/....'
-            fpath = image_file_name.name
-            fpath2 = (os.path.join(path3, fpath))
-            image_file = genai.upload_file(path=fpath2)
-            
-            while image_file.state.name == "PROCESSING":
-                time.sleep(10)
-                image_file = genai.get_file(image_file.name)
-            if image_file.state.name == "FAILED":
-              raise ValueError(image_file.state.name)
-            
-            prompt2 = st.text_input("Enter your prompt.") 
-            if prompt2:
+
+    elif media_type == "Images":
+        image_file = st.file_uploader("Upload an image file", type=["jpg", "jpeg", "png"])
+        if image_file:
+            image = PIL.Image.open(image_file)
+            st.image(image, caption="Uploaded Image", use_container_width=True)
+
+            prompt = st.text_input("Enter your prompt.")
+            if prompt:
                 generation_config = {
-                  "temperature": temperature,
-                  "top_p": top_p,
-                  "max_output_tokens": max_tokens,}
-                model = genai.GenerativeModel(model_name=model, generation_config=generation_config,)
-                response = model.generate_content([image_file, prompt2],
-                                                  request_options={"timeout": 600})
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "max_output_tokens": max_tokens,
+                }
+                model = genai.GenerativeModel(model_name=model, generation_config=generation_config)
+                response = model.generate_content([image, prompt], request_options={"timeout": 600})
                 st.markdown(response.text)
-                
-                genai.delete_file(image_file.name)
-                print(f'Deleted file {image_file.uri}')
-           
-    elif typepdf == "Video, mp4 file":
-        video_file_name = st.file_uploader("Upload your video")
-        if video_file_name:
-            path3 = '/Users/....'
-            fpath = video_file_name.name
-            #st.write(fpath)
-            fpath2 = (os.path.join(path3, fpath))
-            #st.write("Uploading file...")
-            video_file = genai.upload_file(path=fpath2)
-            #st.write(f"Completed upload: {video_file.uri}")
-            
+
+    elif media_type == "Video (mp4)":
+        video_file = st.file_uploader("Upload a video file", type=["mp4"])
+        if video_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                tmp_file.write(video_file.read())
+                tmp_file_path = tmp_file.name
+
+            st.video(tmp_file_path, format="video/mp4", start_time=0)
+
+            video_file = genai.upload_file(path=tmp_file_path)
+
             while video_file.state.name == "PROCESSING":
-                #st.write('.')
                 time.sleep(10)
                 video_file = genai.get_file(video_file.name)
             if video_file.state.name == "FAILED":
-              raise ValueError(video_file.state.name)
-            
-            #file = genai.get_file(name=video_file.name)
-            #st.write(f"Retrieved file '{file.display_name}' as: {video_file.uri}")
-            
-            # Create the prompt.
-            prompt3 = st.text_input("Enter your prompt.") #"what is said in this video in the first 20 seconds?"
-            if prompt3:
-                
-                # The Gemini 1.5 models are versatile and work with multimodal prompts
-                model = genai.GenerativeModel(model_name=model)
-                
-                # Make the LLM request.
-                st.write("Making LLM inference request...")
-                response = model.generate_content([video_file, prompt3],
-                                                  request_options={"timeout": 600})
-                st.markdown(response.text)
-                
-                genai.delete_file(video_file.name)
-                print(f'Deleted file {video_file.uri}')
-      
-    elif typepdf == "Audio files":
-        audio_file_name = st.file_uploader("Upload your audio")
-        if audio_file_name:
-            path3 = '/Users/....'
-            fpath = audio_file_name.name
+                raise ValueError(video_file.state.name)
 
-            fpath2 = (os.path.join(path3, fpath))
-            audio_file = genai.upload_file(path=fpath2)
+            prompt = st.text_input("Enter your prompt.")
+            if prompt:
+                model = genai.GenerativeModel(model_name=model)
+                response = model.generate_content([video_file, prompt], request_options={"timeout": 600})
+                st.markdown(response.text)
+
+                genai.delete_file(video_file.name)
+                print(f"Deleted file {video_file.uri}")
+
+    elif media_type == "Audio (mp3)":
+        audio_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
+        if audio_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
+                tmp_file.write(audio_file.read())
+                tmp_file_path = tmp_file.name
+
+            st.audio(tmp_file_path, format="audio/mp3", start_time=0)
+
+            audio_file = genai.upload_file(path=tmp_file_path)
 
             while audio_file.state.name == "PROCESSING":
                 time.sleep(10)
                 audio_file = genai.get_file(audio_file.name)
             if audio_file.state.name == "FAILED":
-              raise ValueError(audio_file.state.name)
+                raise ValueError(audio_file.state.name)
 
-            prompt3 = st.text_input("Enter your prompt.") #"what is said in this video in the first 20 seconds?"
-            if prompt3:
+            prompt = st.text_input("Enter your prompt.")
+            if prompt:
                 model = genai.GenerativeModel(model_name=model)
-                response = model.generate_content([audio_file, prompt3],
-                                                  request_options={"timeout": 600})
+                response = model.generate_content([audio_file, prompt], request_options={"timeout": 600})
                 st.markdown(response.text)
-                
+
                 genai.delete_file(audio_file.name)
-                print(f'Deleted file {audio_file.uri}')
+                print(f"Deleted file {audio_file.uri}")
 
 
-if __name__ == '__main__':
-    api_key = os.getenv("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
+if __name__ == "__main__":
+    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY_NEW")
+    genai.configure(api_key=GOOGLE_API_KEY)
     main()
