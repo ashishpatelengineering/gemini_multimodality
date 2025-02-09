@@ -29,7 +29,7 @@ def get_media_type():
     st.sidebar.header("Select Type of Media", divider='orange')
     media_type = st.sidebar.radio(
         "Choose one:",
-        ("PDF files", "Images", "Video (mp4)", "Audio (mp3)")
+        ("PDF", "Image", "Video (mp4)", "Audio (mp3)")
     )
     return media_type
 
@@ -94,7 +94,7 @@ def main():
     media_type = get_media_type()
     model, temperature, top_p, max_tokens = get_llm_settings()
 
-    if media_type == "PDF files":
+    if media_type == "PDF":
         uploaded_files = st.file_uploader("Upload PDF file", type="pdf", accept_multiple_files=True)
 
         if uploaded_files:
@@ -120,7 +120,7 @@ def main():
                 response = model.generate_content([question, text])
                 st.write(response.text)
 
-    elif media_type == "Images":
+    elif media_type == "Image":
         image_file = st.file_uploader("Upload an image file", type=["jpg", "jpeg", "png"])
         if image_file:
             image = PIL.Image.open(image_file)
