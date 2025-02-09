@@ -2,6 +2,9 @@ import streamlit as st
 import google.generativeai as genai
 from pypdf import PdfReader 
 import os, fitz, PIL.Image, time
+from dotenv import load_dotenv
+load_dotenv()
+
 path2 = '/Users/....'
 
 def page_setup():
@@ -188,6 +191,6 @@ def main():
 
 
 if __name__ == '__main__':
-    GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY_NEW')
-    genai.configure(api_key=GOOGLE_API_KEY)
+    api_key = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
     main()
