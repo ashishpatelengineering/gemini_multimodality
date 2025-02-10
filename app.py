@@ -38,12 +38,14 @@ def get_llm_settings():
     """Display sidebar options for configuring the LLM."""
     st.sidebar.header("LLM Configuration", divider='rainbow')
 
-    model_tip = "Select the model you want to use."
-    model = st.sidebar.radio(
-        "Choose LLM:",
-        ("gemini-1.5-flash", "gemini-1.5-pro"),
-        help=model_tip
-    )
+    # model_tip = "Select the model you want to use."
+    # model = st.sidebar.radio(
+    #     "Choose LLM:",
+    #     ("gemini-1.5-flash", "gemini-1.5-pro"),
+    #     help=model_tip
+    # )
+    
+    model = "gemini-1.5-flash"
 
     temp_tip = (
         "Lower temperatures are good for prompts requiring less creativity, "
