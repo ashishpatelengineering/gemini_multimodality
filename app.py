@@ -48,9 +48,11 @@ def get_llm_settings():
     model = "gemini-1.5-flash"
 
     temp_tip = (
-        "Lower temperatures are good for prompts requiring less creativity, "
-        "while higher temperatures can lead to more diverse or creative results. "
-        "A temperature of 0 means the highest probability tokens are always selected."
+        '''
+        Lower temperatures are suitable for prompts requiring less creativity, 
+        while higher temperatures can lead to more diverse and creative results. 
+        At a temperature of 0, the model always selects the most likely words.
+        '''
     )
     temperature = st.sidebar.slider(
         "Temperature:", min_value=0.0, max_value=2.0, value=1.0, step=0.25, help=temp_tip
