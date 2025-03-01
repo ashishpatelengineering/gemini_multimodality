@@ -1,11 +1,7 @@
-import os
-import time
-import tempfile
-import streamlit as st
-import google.generativeai as genai
-from pypdf import PdfReader
-import fitz
-import PIL.Image
+import streamlit as st, os, time
+from google import genai
+from google.genai import types
+from pypdf import PdfReader, PdfWriter, PdfMerger
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,188 +9,371 @@ load_dotenv()
 
 
 def setup_page():
-    """Set up the Streamlit page with a header and custom styles."""
-    st.header("AI-Powered File & Media Interaction", anchor=False, divider="blue")
-
-    # # Hide the Streamlit menu
-    # hide_menu_style = """
-    #     <style>
-    #     #MainMenu {visibility: hidden;}
-    #     </style>
-    #     """
-    # st.markdown(hide_menu_style, unsafe_allow_html=True)
-
-def get_media_type():
-    """Display a sidebar radio button to select the type of media."""
-    st.sidebar.header("Select Type of Media", divider='orange')
-    media_type = st.sidebar.radio(
-        "Choose one:",
-        ("PDF", "Image", "Video (mp4)", "Audio (mp3)")
-    )
-    return media_type
-
-
-def get_llm_settings():
-    """Display sidebar options for configuring the LLM."""
-    st.sidebar.header("LLM Configuration", divider='rainbow')
-
-    # model_tip = "Select the model you want to use."
-    # model = st.sidebar.radio(
-    #     "Choose LLM:",
-    #     ("gemini-1.5-flash", "gemini-1.5-pro"),
-    #     help=model_tip
-    # )
-    
-    model = "gemini-1.5-flash"
-
-    temp_tip = (
-        '''
-        Lower temperatures are suitable for prompts requiring less creativity, 
-        while higher temperatures can lead to more diverse and creative results. 
-        At a temperature of 0, the model always selects the most likely words.
-        '''
-    )
-    temperature = st.sidebar.slider(
-        "Temperature:", min_value=0.0, max_value=2.0, value=1.0, step=0.25, help=temp_tip
+    st.set_page_config(
+        page_title="AI-Powered Chatbot",
+        layout="centered"
     )
 
-    top_p_tip = (
-        "Used for nucleus sampling. Lower values result in less random responses, "
-        "while higher values result in more random responses."
-    )
-    top_p = st.sidebar.slider(
-        "Top P:", min_value=0.0, max_value=1.0, value=0.94, step=0.01, help=top_p_tip
-    )
+    st.header("AI-Powered Chatbot", anchor=False, divider="blue")
 
-    max_tokens_tip = "Number of response tokens. The limit is 8194."
-    max_tokens = st.sidebar.slider(
-        "Maximum Tokens:", min_value=100, max_value=5000, value=2000, step=100, help=max_tokens_tip
-    )
+    st.sidebar.header("Options", divider='rainbow')
 
-    return model, temperature, top_p, max_tokens
+    hide_menu_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            </style>
+            """
+    st.markdown(hide_menu_style, unsafe_allow_html=True)
 
 
-def extract_images_from_pdf(pdf_file):
-    """Extract images from a PDF file and save them as temporary files."""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(pdf_file.read())
-        tmp_file_path = tmp_file.name
+def get_choice():
+    choice = st.sidebar.radio("Choose:", ["Chat with AI",
+                                          "Chat with a PDF",
+                                          "Chat with many PDFs",
+                                          "Chat with an image",
+                                          "Chat with audio",
+                                          "Chat with video"], )
+    return choice
 
-    doc = fitz.open(tmp_file_path)
-    images = []
-    for page in doc:
-        pix = page.get_pixmap(
-            matrix=fitz.Identity, dpi=None, colorspace=fitz.csRGB, clip=None, alpha=False, annots=True
-        )
-        img_path = f"pdfimage-{page.number}.jpg"
-        pix.save(img_path)
-        images.append(img_path)
-    return images
+
+def get_clear():
+    clear_button = st.sidebar.button("Start new session", key="clear")
+    return clear_button
 
 
 def main():
-    """Main function to run the Streamlit app."""
-    setup_page()
-    media_type = get_media_type()
-    model, temperature, top_p, max_tokens = get_llm_settings()
+    choice = get_choice()
 
-    if media_type == "PDF":
-        uploaded_files = st.file_uploader("Upload PDF file", type="pdf", accept_multiple_files=True)
+    if choice == "Chat with AI":
+        st.subheader("Chat with AI")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
 
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        if 'chat' not in st.session_state or clear: # Create a new chat object at the begining of session or after "Start New Session" button is clicked
+            st.session_state.chat = client.chats.create(model=MODEL_ID, config=types.GenerateContentConfig(
+                system_instruction="You are a helpful assistant. Your answers need to be positive and accurate.", ))
+
+        prompt = st.chat_input("Enter your question here")
+        if prompt:
+            with st.chat_message("user"):
+                st.write(prompt)
+
+            st.session_state.message += prompt
+            with st.chat_message(
+                    "model", avatar="🟦",
+            ):
+                response = st.session_state.chat.send_message(st.session_state.message) # Now using the chat object from session state
+                st.markdown(response.text)
+                st.sidebar.markdown(str(response.usage_metadata))
+            st.session_state.message += response.text
+
+    elif choice == "Chat with a PDF":
+        st.subheader("Chat with your PDF file")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
+
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        uploaded_files = st.file_uploader("Choose your pdf file", type=['pdf'], accept_multiple_files=False)
         if uploaded_files:
-            text = ""
-            for pdf in uploaded_files:
-                pdf_reader = PdfReader(pdf)
-                for page in pdf_reader.pages:
-                    text += page.extract_text()
+            try:
+                with st.spinner("Uploading and processing PDF..."):
+                    # Save uploaded file to temporary location
+                    with open("temp.pdf", "wb") as f:
+                        f.write(uploaded_files.read())
 
-            generation_config = {
-                "temperature": temperature,
-                "top_p": top_p,
-                "max_output_tokens": max_tokens,
-                "response_mime_type": "text/plain",
-            }
-            model = genai.GenerativeModel(
-                model_name=model,
-                generation_config=generation_config,
-            )
-            # st.write(model.count_tokens(text))
-            question = st.text_input("Enter your question and hit return.")
-            if question:
-                response = model.generate_content([question, text])
-                st.write(response.text)
-
-    elif media_type == "Image":
-        image_file = st.file_uploader("Upload an image file", type=["jpg", "jpeg", "png"])
-        if image_file:
-            image = PIL.Image.open(image_file)
-            st.image(image, caption="Uploaded Image", use_container_width=True)
-
-            prompt = st.text_input("Enter your prompt.")
-            if prompt:
-                generation_config = {
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "max_output_tokens": max_tokens,
-                }
-                model = genai.GenerativeModel(model_name=model, generation_config=generation_config)
-                response = model.generate_content([image, prompt], request_options={"timeout": 600})
-                st.markdown(response.text)
-
-    elif media_type == "Video (mp4)":
-        video_file = st.file_uploader("Upload a video file", type=["mp4"])
-        if video_file:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
-                tmp_file.write(video_file.read())
-                tmp_file_path = tmp_file.name
-
-            st.video(tmp_file_path, format="video/mp4", start_time=0)
-
-            video_file = genai.upload_file(path=tmp_file_path)
-
-            while video_file.state.name == "PROCESSING":
-                time.sleep(10)
-                video_file = genai.get_file(video_file.name)
-            if video_file.state.name == "FAILED":
-                raise ValueError(video_file.state.name)
-
-            prompt = st.text_input("Enter your prompt.")
-            if prompt:
-                model = genai.GenerativeModel(model_name=model)
-                response = model.generate_content([video_file, prompt], request_options={"timeout": 600})
-                st.markdown(response.text)
-
-                genai.delete_file(video_file.name)
-                print(f"Deleted file {video_file.uri}")
-
-    elif media_type == "Audio (mp3)":
-        audio_file = st.file_uploader("Upload an audio file", type=["mp3", "wav"])
-        if audio_file:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
-                tmp_file.write(audio_file.read())
-                tmp_file_path = tmp_file.name
-
-            st.audio(tmp_file_path, format="audio/mp3", start_time=0)
-
-            audio_file = genai.upload_file(path=tmp_file_path)
-
-            while audio_file.state.name == "PROCESSING":
-                time.sleep(10)
-                audio_file = genai.get_file(audio_file.name)
-            if audio_file.state.name == "FAILED":
-                raise ValueError(audio_file.state.name)
-
-            prompt = st.text_input("Enter your prompt.")
-            if prompt:
-                model = genai.GenerativeModel(model_name=model)
-                response = model.generate_content([audio_file, prompt], request_options={"timeout": 600})
-                st.markdown(response.text)
-
-                genai.delete_file(audio_file.name)
-                print(f"Deleted file {audio_file.uri}")
+                    file_upload = client.upload_file(file="temp.pdf", mime_type="application/pdf") # Mime Type added for better compatibility
 
 
-if __name__ == "__main__":
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY_NEW")
-    genai.configure(api_key=GOOGLE_API_KEY)
-    main()
+                if 'chat2' not in st.session_state or clear: # Check if chat object exists or if "clear" is pressed
+                    st.session_state.chat2 = client.chats.create(model=MODEL_ID,
+                        history=[
+                            types.Content(
+                                role="user",
+                                parts=[
+
+                                        types.Part.from_uri(
+                                            file_uri=file_upload.uri,
+                                            mime_type="application/pdf"), # Mime Type added here too for compatibility
+                                        ]
+                                ),
+                            ]
+                            )
+                prompt2 = st.chat_input("Enter your question here")
+                if prompt2:
+                    with st.chat_message("user"):
+                        st.write(prompt2)
+
+                    st.session_state.message += prompt2
+                    with st.chat_message(
+                        "model", avatar="🟦",
+                    ):
+                        response2 = st.session_state.chat2.send_message(st.session_state.message)
+                        st.markdown(response2.text)
+                        st.sidebar.markdown(str(response2.usage_metadata))
+                    st.session_state.message += response2.text
+            except Exception as e:
+                st.error(f"An error occurred processing the PDF: {e}")
+            finally:
+                if os.path.exists("temp.pdf"):
+                    os.remove("temp.pdf")  # Clean up temporary file
+
+    elif choice == "Chat with many PDFs":
+        st.subheader("Chat with your PDF file")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
+
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        uploaded_files2 = st.file_uploader("Choose 1 or more files", type=['pdf'], accept_multiple_files=True)
+
+        if uploaded_files2:
+            try:
+                with st.spinner("Merging PDFs..."):
+                    merger = PdfMerger()
+                    temp_files = []  # Keep track of temporary files
+
+                    for file in uploaded_files2:
+                        temp_file_path = f"temp_{file.name}"  # Unique temporary filename
+                        with open(temp_file_path, "wb") as f:
+                            f.write(file.read())
+                        merger.append(temp_file_path)
+                        temp_files.append(temp_file_path)
+
+                    fullfile = "merged_all_files.pdf"
+                    merger.write(fullfile)
+                    merger.close()
+
+                with st.spinner("Uploading merged PDF..."):
+                    file_upload = client.upload_file(file=fullfile, mime_type="application/pdf")
+
+                if 'chat2b' not in st.session_state or clear:
+                    st.session_state.chat2b = client.chats.create(model=MODEL_ID,
+                        history=[
+                            types.Content(
+                                role="user",
+                                parts=[
+
+                                        types.Part.from_uri(
+                                            file_uri=file_upload.uri,
+                                            mime_type="application/pdf"),
+                                        ]
+                                ),
+                            ]
+                            )
+
+                prompt2b = st.chat_input("Enter your question here")
+                if prompt2b:
+                    with st.chat_message("user"):
+                        st.write(prompt2b)
+
+                    st.session_state.message += prompt2b
+                    with st.chat_message(
+                        "model", avatar="🟦",
+                    ):
+                        response2b = st.session_state.chat2b.send_message(st.session_state.message)
+                        st.markdown(response2b.text)
+                        st.sidebar.markdown(str(response2b.usage_metadata))
+                    st.session_state.message += response2b.text
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+            finally:
+                # Clean up temporary files
+                for temp_file in temp_files:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                if os.path.exists(fullfile):
+                    os.remove(fullfile)
+
+    elif choice == "Chat with an image":
+        st.subheader("Chat with an Image")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
+
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        uploaded_files2 = st.file_uploader("Choose your PNG or JPEG file", type=['png', 'jpg', 'jpeg'],
+                                            accept_multiple_files=False)
+        if uploaded_files2:
+            try:
+                with st.spinner("Uploading and processing image..."):
+                    # Save uploaded file to temporary location
+                    with open("temp_image", "wb") as f:
+                        f.write(uploaded_files2.read())
+                    mime_type = "image/png" if uploaded_files2.name.endswith(".png") else "image/jpeg" # Detect image type
+                    file_upload = client.upload_file(file="temp_image", mime_type=mime_type)
+
+                if 'chat3' not in st.session_state or clear:
+                    st.session_state.chat3 = client.chats.create(model=MODEL_ID,
+                        history=[
+                            types.Content(
+                                role="user",
+                                parts=[
+
+                                        types.Part.from_uri(
+                                            file_uri=file_upload.uri,
+                                            mime_type=mime_type),
+                                        ]
+                                ),
+                            ]
+                            )
+
+                prompt3 = st.chat_input("Enter your question here")
+                if prompt3:
+                    with st.chat_message("user"):
+                        st.write(prompt3)
+
+                    st.session_state.message += prompt3
+                    with st.chat_message(
+                        "model", avatar="🟦",
+                    ):
+                        response3 = st.session_state.chat3.send_message(st.session_state.message)
+                        st.markdown(response3.text)
+                    st.session_state.message += response3.text
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+            finally:
+                 if os.path.exists("temp_image"):
+                    os.remove("temp_image")
+
+    elif choice == "Chat with audio":
+        st.subheader("Chat with your audio file")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
+
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        uploaded_files3 = st.file_uploader("Choose your mp3 or wav file", type=['mp3', 'wav'],
+                                            accept_multiple_files=False)
+        if uploaded_files3:
+            try:
+                with st.spinner("Uploading and processing audio..."):
+                    with open("temp_audio", "wb") as f:
+                        f.write(uploaded_files3.read())
+
+                    mime_type = "audio/mpeg" if uploaded_files3.name.endswith(".mp3") else "audio/wav" # Detect audio type
+                    file_upload = client.upload_file(file="temp_audio", mime_type=mime_type)
+
+
+                if 'chat4' not in st.session_state or clear:
+                    st.session_state.chat4 = client.chats.create(model=MODEL_ID,
+                        history=[
+                            types.Content(
+                                role="user",
+                                parts=[
+
+                                        types.Part.from_uri(
+                                            file_uri=file_upload.uri,
+                                            mime_type=mime_type),
+                                        ]
+                                ),
+                            ]
+                            )
+
+                prompt5 = st.chat_input("Enter your question here")
+                if prompt5:
+                    with st.chat_message("user"):
+                        st.write(prompt5)
+
+                    st.session_state.message += prompt5
+                    with st.chat_message(
+                        "model", avatar="🟦",
+                    ):
+                        response4 = st.session_state.chat4.send_message(st.session_state.message)
+                        st.markdown(response4.text)
+                    st.session_state.message += response4.text
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+            finally:
+                if os.path.exists("temp_audio"):
+                    os.remove("temp_audio")
+
+    elif choice == "Chat with video":
+        st.subheader("Chat with your video file")
+        clear = get_clear()
+        if clear:
+            if 'message' in st.session_state:
+                del st.session_state['message']
+
+        if 'message' not in st.session_state:
+            st.session_state.message = " "
+
+        uploaded_files4 = st.file_uploader("Choose your mp4 or mov file", type=['mp4', 'mov'],
+                                            accept_multiple_files=False)
+
+        if uploaded_files4:
+            try:
+                with st.spinner("Uploading and processing video..."):
+                    with open("temp_video", "wb") as f:
+                        f.write(uploaded_files4.read())
+                    mime_type = "video/mp4" if uploaded_files4.name.endswith(".mp4") else "video/quicktime"  # Assuming mov is quicktime
+
+                    video_file = client.upload_file(file="temp_video", mime_type=mime_type)
+
+                    while video_file.state == "PROCESSING":
+                        time.sleep(10)
+                        video_file = client.files.get(name=video_file.name)
+
+                    if video_file.state == "FAILED":
+                        raise ValueError(video_file.state)
+
+                if 'chat5' not in st.session_state or clear:
+                    st.session_state.chat5 = client.chats.create(model=MODEL_ID,
+                        history=[
+                            types.Content(
+                                role="user",
+                                parts=[
+
+                                        types.Part.from_uri(
+                                            file_uri=video_file.uri,
+                                            mime_type=mime_type),
+                                        ]
+                                ),
+                            ]
+                            )
+
+                prompt4 = st.chat_input("Enter your question here")
+                if prompt4:
+                    with st.chat_message("user"):
+                        st.write(prompt4)
+
+                    st.session_state.message += prompt4
+                    with st.chat_message(
+                        "model", avatar="🟦",
+                    ):
+                        response5 = st.session_state.chat5.send_message(st.session_state.message)
+                        st.markdown(response5.text)
+                    st.session_state.message += response5.text
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+            finally:
+                if os.path.exists("temp_video"):
+                    os.remove("temp_video")
+
+
+if __name__ == '__main__':
+    setup_page()
+    GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+    if not GOOGLE_API_KEY:
+        st.error("Please set the GOOGLE_API_KEY environment variable.")
+    else:
+        client = genai.Client(api_key=GOOGLE_API_KEY)
+        MODEL_ID = "gemini-2.0-flash"
+        main()
