@@ -95,6 +95,14 @@ def extract_images_from_pdf(pdf_file):
 def main():
     """Main function to run the Streamlit app."""
     setup_page()
+
+    # Ask for API key first
+    api_key = get_api_key()
+    if not api_key:
+        st.warning("Enter your Google API key in the sidebar to continue.")
+        return
+    genai.configure(api_key=api_key)
+    
     media_type = get_media_type()
     model, temperature, top_p, max_tokens = get_llm_settings()
 
@@ -195,6 +203,4 @@ def main():
 
 
 if __name__ == "__main__":
-    GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY_NEW")
-    genai.configure(api_key=GOOGLE_API_KEY)
     main()
