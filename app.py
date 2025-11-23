@@ -38,14 +38,14 @@ def get_llm_settings():
     """Display sidebar options for configuring the LLM."""
     st.sidebar.header("LLM Configuration", divider='rainbow')
 
-    # model_tip = "Select the model you want to use."
-    # model = st.sidebar.radio(
-    #     "Choose LLM:",
-    #     ("gemini-1.5-flash", "gemini-1.5-pro"),
-    #     help=model_tip
-    # )
+    model_tip = "Select the model you want to use."
+    model = st.sidebar.radio(
+        "Choose LLM:",
+        ("gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-flash-latest-lite"),
+        help=model_tip
+    )
     
-    model = "gemini-1.5-flash"
+    # model = "gemini-2.0-flash"
 
     temp_tip = (
         '''
