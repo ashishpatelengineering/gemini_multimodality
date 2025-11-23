@@ -11,18 +11,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-
 def setup_page():
     """Set up the Streamlit page with a header and custom styles."""
     st.header("AI-Powered File & Media Interaction", anchor=False, divider="blue")
 
-    # # Hide the Streamlit menu
-    # hide_menu_style = """
-    #     <style>
-    #     #MainMenu {visibility: hidden;}
-    #     </style>
-    #     """
-    # st.markdown(hide_menu_style, unsafe_allow_html=True)
+def get_api_key():
+    """Ask user for a Google API key from the sidebar."""
+    st.sidebar.header("API Key", divider="green")
+    return st.sidebar.text_input("Enter your Google API Key:", type="password")
 
 def get_media_type():
     """Display a sidebar radio button to select the type of media."""
